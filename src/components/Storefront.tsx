@@ -180,9 +180,6 @@ export function Storefront({
               priority
               onError={() => setModelSrc("/images/model-placeholder.svg")}
             />
-            <div className="pointer-events-none absolute bottom-3 left-3 rounded-md bg-white/90 px-3 py-1 text-xs text-stone-600">
-              Replace with your photo: public/images/model.jpg
-            </div>
           </div>
           <p className="text-sm leading-relaxed text-stone-600">
             White tee with &quot;need money for claude code&quot; and a QR code
