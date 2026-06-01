@@ -71,6 +71,12 @@ export function getSiteUrl(): string {
   return optional("NEXT_PUBLIC_SITE_URL", "http://localhost:3000");
 }
 
+/** When true, failed Printify fulfillment triggers a full Stripe refund (if no Printify order was created). */
+export function shouldAutoRefundOnFulfillmentFailure(): boolean {
+  const raw = process.env.AUTO_REFUND_ON_FULFILLMENT_FAILURE ?? "true";
+  return raw !== "false" && raw !== "0";
+}
+
 export function isConfigured(): boolean {
   try {
     getPrintifyConfig();

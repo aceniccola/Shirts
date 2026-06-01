@@ -9,7 +9,8 @@ export default async function Home({
   const params = await searchParams;
   let initialBanner: string | null = null;
   if (params.success === "1") {
-    initialBanner = "Payment received — your shirt is being printed.";
+    initialBanner =
+      "Payment received — a receipt was sent to your email. Your shirt will be sent to Printify once fulfillment completes (usually within a minute).";
   } else if (params.canceled === "1") {
     initialBanner = "Checkout canceled. Your cart is still here.";
   }

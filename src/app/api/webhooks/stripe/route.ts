@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
+import { shouldAutoRefundOnFulfillmentFailure } from "@/lib/env";
 import { fulfillOrderFromSession } from "@/lib/fulfillment";
-import { constructStripeEvent } from "@/lib/stripe";
+import { findOrderByExternalId } from "@/lib/printify";
+import { constructStripeEvent, refundCheckoutSession } from "@/lib/stripe";
 import type { AddressInput } from "@/lib/validators";
 
 export const runtime = "nodejs";
@@ -62,8 +64,70 @@ export async function POST(request: NextRequest) {
         `Fulfilled order ${result.orderId} for session ${session.id} (existing=${result.alreadyExisted})`,
       );
     } catch (error) {
-      console.error("Fulfillment failed:", error);
-      return NextResponse.json({ error: "Fulfillment failed" }, { status: 500 });
+      const detail =
+        error instanceof Error ? error.message : "Unknown fulfillment error";
+      console.error(
+        `Fulfillment failed for session ${session.id}:`,
+        detail,
+        error,
+      );
+
+      const existingPrintifyOrderId = await findOrderByExternalId(session.id);
+
+      if (existingPrintifyOrderId) {
+        console.error(
+          `Printify order ${existingPrintifyOrderId} exists for session ${session.id}; skipping auto-refund`,
+        );
+        return NextResponse.json({
+          received: true,
+          fulfillmentFailed: true,
+          detail,
+          refunded: false,
+          skipRefundReason: "printify_order_exists",
+          printifyOrderId: existingPrintifyOrderId,
+        });
+      }
+
+      if (!shouldAutoRefundOnFulfillmentFailure()) {
+        return NextResponse.json(
+          { error: "Fulfillment failed", detail, refunded: false },
+          { status: 500 },
+        );
+      }
+
+      try {
+        const refund = await refundCheckoutSession(session);
+        console.log(
+          `Auto-refund for session ${session.id}:`,
+          refund.status,
+          refund.status === "refunded" ? refund.refundId : "",
+        );
+
+        return NextResponse.json({
+          received: true,
+          fulfillmentFailed: true,
+          detail,
+          refunded: refund.status === "refunded",
+          refundStatus: refund.status,
+        });
+      } catch (refundError) {
+        console.error(
+          `Auto-refund failed for session ${session.id}:`,
+          refundError,
+        );
+        return NextResponse.json(
+          {
+            error: "Fulfillment failed",
+            detail,
+            refundFailed: true,
+            refundError:
+              refundError instanceof Error
+                ? refundError.message
+                : "Refund failed",
+          },
+          { status: 500 },
+        );
+      }
     }
   }
 
