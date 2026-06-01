@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { parseDesignText } from "./design";
 
 export const addressSchema = z.object({
   firstName: z.string().min(1).max(50),
@@ -15,6 +16,7 @@ export const addressSchema = z.object({
 
 export const quoteRequestSchema = z.object({
   venmo: z.string().min(1).max(32),
+  designText: z.string().min(1).max(120),
   size: z.enum(["S", "M", "L", "XL", "2XL"]),
   address: addressSchema,
 });
@@ -41,4 +43,13 @@ export function toPrintifyAddress(address: AddressInput) {
     city: address.city,
     zip: address.zip,
   };
+}
+
+/** Normalize design text for storage in Stripe metadata */
+export function serializeDesignText(lines: string[]): string {
+  return lines.join("\n");
+}
+
+export function deserializeDesignText(raw: string): string[] {
+  return parseDesignText(raw);
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getVariantIds } from "@/lib/env";
+import { getVariantIdForSize } from "@/lib/env";
 import { getShippingQuote } from "@/lib/printify";
 import { rateLimit } from "@/lib/rate-limit";
 import { createCheckoutSession } from "@/lib/stripe";
@@ -28,14 +28,7 @@ export async function POST(request: NextRequest) {
     const input = parsed.data;
     normalizeVenmo(input.venmo);
 
-    const variantIds = getVariantIds();
-    const variantId = variantIds[input.size];
-    if (!variantId) {
-      return NextResponse.json(
-        { error: `No Printify variant configured for size ${input.size}` },
-        { status: 500 },
-      );
-    }
+    const variantId = getVariantIdForSize(input.size);
 
     const shippingOptions = await getShippingQuote(variantId, input.address);
     const selected = shippingOptions.find(

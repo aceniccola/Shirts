@@ -1,7 +1,9 @@
 "use client";
 
 import Image from "next/image";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { DEFAULT_DESIGN_TEXT } from "@/lib/design-defaults";
+import { ShirtMockup } from "./ShirtMockup";
 
 type AddressForm = {
   firstName: string;
@@ -26,10 +28,10 @@ type ShippingOption = {
 
 type QuoteResponse = {
   venmo: string;
+  designText: string;
   size: string;
   shirtPriceCents: number;
   shippingOptions: ShippingOption[];
-  previewUrl: string;
 };
 
 const SIZES = ["S", "M", "L", "XL", "2XL"] as const;
@@ -62,6 +64,7 @@ export function Storefront({
   initialBanner?: string | null;
 }) {
   const [venmo, setVenmo] = useState("");
+  const [designText, setDesignText] = useState(DEFAULT_DESIGN_TEXT);
   const [size, setSize] = useState<(typeof SIZES)[number]>("M");
   const [address, setAddress] = useState<AddressForm>(emptyAddress);
   const [quote, setQuote] = useState<QuoteResponse | null>(null);
@@ -72,6 +75,11 @@ export function Storefront({
   const [banner] = useState<string | null>(initialBanner);
   const [modelSrc, setModelSrc] = useState("/images/model.jpg");
 
+  const [previewBlobUrl, setPreviewBlobUrl] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const previewUrlRef = useRef<string | null>(null);
+
   const selectedOption = quote?.shippingOptions.find(
     (o) => o.method === selectedShipping,
   );
@@ -81,34 +89,136 @@ export function Storefront({
     return shirtPriceCents + selectedOption.costCents;
   }, [shirtPriceCents, selectedOption]);
 
-  const previewSrc = quote?.previewUrl ?? null;
+  useEffect(() => {
+    let cancelled = false;
+
+    const timer = setTimeout(async () => {
+      const trimmedVenmo = venmo.trim();
+      const trimmedText = designText.trim();
+
+      if (!trimmedVenmo || !trimmedText) {
+        if (cancelled) return;
+        if (previewUrlRef.current) {
+          URL.revokeObjectURL(previewUrlRef.current);
+          previewUrlRef.current = null;
+        }
+        setPreviewBlobUrl(null);
+        setPreviewError(null);
+        setPreviewLoading(false);
+        return;
+      }
+
+      setPreviewLoading(true);
+      setPreviewError(null);
+
+      try {
+        const res = await fetch("/api/preview", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            venmo: trimmedVenmo,
+            designText: trimmedText,
+          }),
+        });
+
+        if (cancelled) return;
+
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(
+            (data as { error?: string }).error ?? "Preview failed",
+          );
+        }
+
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+
+        if (previewUrlRef.current) {
+          URL.revokeObjectURL(previewUrlRef.current);
+        }
+        previewUrlRef.current = url;
+        setPreviewBlobUrl(url);
+      } catch (err) {
+        if (cancelled) return;
+        setPreviewError(
+          err instanceof Error ? err.message : "Could not load preview",
+        );
+        setPreviewBlobUrl(null);
+      } finally {
+        if (!cancelled) {
+          setPreviewLoading(false);
+        }
+      }
+    }, 400);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [venmo, designText]);
+
+  useEffect(() => {
+    return () => {
+      if (previewUrlRef.current) {
+        URL.revokeObjectURL(previewUrlRef.current);
+      }
+    };
+  }, []);
 
   const fetchQuote = useCallback(async () => {
+    if (!address.phone.trim()) {
+      setError("Phone number is required for shipping.");
+      return;
+    }
+
     setLoadingQuote(true);
     setError(null);
     setQuote(null);
     setSelectedShipping(null);
 
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30_000);
+
     try {
       const res = await fetch("/api/quote", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ venmo, size, address }),
+        body: JSON.stringify({ venmo, designText, size, address }),
+        signal: controller.signal,
       });
-      const data = await res.json();
+
+      let data: { error?: string; details?: unknown };
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error(
+          res.ok
+            ? "Invalid response from server"
+            : `Shipping request failed (${res.status})`,
+        );
+      }
+
       if (!res.ok) {
         throw new Error(data.error ?? "Failed to get shipping quote");
       }
-      setQuote(data as QuoteResponse);
-      if (data.shippingOptions?.length) {
-        setSelectedShipping(data.shippingOptions[0].method);
+      const quoteData = data as QuoteResponse;
+      setQuote(quoteData);
+      if (quoteData.shippingOptions?.length) {
+        setSelectedShipping(quoteData.shippingOptions[0].method);
+      } else {
+        setError("No shipping options returned for this address.");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      if (err instanceof Error && err.name === "AbortError") {
+        setError("Shipping request timed out. Try again in a moment.");
+      } else {
+        setError(err instanceof Error ? err.message : "Something went wrong");
+      }
     } finally {
+      clearTimeout(timeout);
       setLoadingQuote(false);
     }
-  }, [venmo, size, address]);
+  }, [venmo, designText, size, address]);
 
   const startCheckout = async () => {
     if (!quote || !selectedOption) {
@@ -125,6 +235,7 @@ export function Storefront({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           venmo,
+          designText,
           size,
           address,
           shippingMethod: selectedOption.method,
@@ -182,18 +293,38 @@ export function Storefront({
             />
           </div>
           <p className="text-sm leading-relaxed text-stone-600">
-            White tee with &quot;need money for claude code&quot; and a QR code
-            that links to your Venmo. Each order is printed on demand.
+            Custom text plus a Venmo QR code, printed on a white tee on demand.
           </p>
         </section>
 
-        <section className="space-y-6 rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
+        <section
+          className="space-y-6 rounded-2xl border border-stone-200 bg-white p-6 shadow-sm"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.target as HTMLElement).tagName !== "BUTTON") {
+              e.preventDefault();
+            }
+          }}
+        >
           <div>
             <h2 className="text-lg font-semibold">Customize</h2>
             <p className="mt-1 text-sm text-stone-600">
-              Enter your Venmo username for the QR code on the shirt.
+              Edit the shirt text and enter your Venmo for the QR code.
             </p>
           </div>
+
+          <label className="block space-y-1 text-sm">
+            <span className="font-medium">Shirt text</span>
+            <textarea
+              className="w-full resize-y rounded-lg border border-stone-300 px-3 py-2 font-mono text-sm leading-relaxed outline-none focus:border-stone-500"
+              rows={4}
+              value={designText}
+              onChange={(e) => setDesignText(e.target.value)}
+              placeholder={DEFAULT_DESIGN_TEXT}
+            />
+            <span className="text-xs text-stone-500">
+              One line per row (up to 4 lines). QR links to your Venmo.
+            </span>
+          </label>
 
           <label className="block space-y-1 text-sm">
             <span className="font-medium">Venmo username</span>
@@ -223,19 +354,16 @@ export function Storefront({
             </select>
           </label>
 
-          {previewSrc && venmo.trim() && (
-            <div className="space-y-2">
-              <p className="text-sm font-medium">Print preview</p>
-              <div className="flex justify-center rounded-lg border border-stone-200 bg-stone-50 p-4">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={previewSrc}
-                  alt="Shirt design preview"
-                  className="max-h-64 w-auto"
-                />
-              </div>
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Preview</p>
+            <div className="flex justify-center rounded-xl border border-stone-200 bg-stone-100/80 py-6">
+              <ShirtMockup
+                designSrc={previewBlobUrl}
+                loading={previewLoading}
+                error={previewError}
+              />
             </div>
-          )}
+          </div>
 
           <div className="space-y-3 border-t border-stone-100 pt-4">
             <h3 className="text-sm font-semibold">Shipping (US)</h3>
@@ -259,6 +387,8 @@ export function Storefront({
                     className="w-full rounded-lg border border-stone-300 px-3 py-2"
                     value={address[field]}
                     onChange={(e) => updateAddress(field, e.target.value)}
+                    required={field !== "address2"}
+                    type={field === "email" ? "email" : field === "phone" ? "tel" : "text"}
                   />
                 </label>
               ))}
@@ -268,7 +398,7 @@ export function Storefront({
           <button
             type="button"
             onClick={fetchQuote}
-            disabled={loadingQuote || !venmo.trim()}
+            disabled={loadingQuote || !venmo.trim() || !designText.trim()}
             className="w-full rounded-lg border border-stone-300 bg-stone-100 px-4 py-3 text-sm font-medium transition hover:bg-stone-200 disabled:opacity-50"
           >
             {loadingQuote ? "Getting shipping…" : "Get shipping options"}

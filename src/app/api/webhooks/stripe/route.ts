@@ -31,11 +31,12 @@ export async function POST(request: NextRequest) {
 
     const metadata = session.metadata ?? {};
     const venmo = metadata.venmo;
+    const designText = metadata.designText;
     const variantId = Number.parseInt(metadata.variantId ?? "", 10);
     const shippingMethod = Number.parseInt(metadata.shippingMethod ?? "", 10);
     const addressJson = metadata.addressJson;
 
-    if (!venmo || !addressJson || !variantId || !shippingMethod) {
+    if (!venmo || !designText || !addressJson || !variantId || !shippingMethod) {
       console.error("Webhook missing metadata", session.id, metadata);
       return NextResponse.json({ error: "Missing metadata" }, { status: 400 });
     }
@@ -51,6 +52,7 @@ export async function POST(request: NextRequest) {
       const result = await fulfillOrderFromSession({
         sessionId: session.id,
         venmo,
+        designText,
         variantId,
         shippingMethod,
         address,

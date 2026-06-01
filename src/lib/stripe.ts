@@ -1,6 +1,8 @@
 import Stripe from "stripe";
 import { getShirtPriceCents, getSiteUrl } from "./env";
+import { parseDesignText } from "./design";
 import type { CheckoutRequest } from "./validators";
+import { serializeDesignText } from "./validators";
 
 function getStripe(): Stripe {
   const key = process.env.STRIPE_SECRET_KEY;
@@ -25,6 +27,7 @@ export async function createCheckoutSession(
     customer_email: input.address.email,
     metadata: {
       venmo: input.venmo,
+      designText: serializeDesignText(parseDesignText(input.designText)),
       size: input.size,
       variantId: String(variantId),
       shippingMethod: String(input.shippingMethod),

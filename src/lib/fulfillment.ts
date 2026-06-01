@@ -1,4 +1,4 @@
-import { generateShirtDesign } from "./design";
+import { generateShirtDesign, parseDesignText } from "./design";
 import { normalizeVenmo } from "./venmo";
 import {
   createAndFulfillOrder,
@@ -10,6 +10,7 @@ import type { AddressInput } from "./validators";
 export async function fulfillOrderFromSession(params: {
   sessionId: string;
   venmo: string;
+  designText: string;
   variantId: number;
   shippingMethod: number;
   address: AddressInput;
@@ -20,7 +21,8 @@ export async function fulfillOrderFromSession(params: {
   }
 
   const venmo = normalizeVenmo(params.venmo);
-  const designBuffer = await generateShirtDesign(venmo);
+  const lines = parseDesignText(params.designText);
+  const designBuffer = await generateShirtDesign(venmo, lines);
   const upload = await uploadDesignImage(
     designBuffer,
     `design-${params.sessionId}.png`,

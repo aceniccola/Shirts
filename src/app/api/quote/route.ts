@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getShirtPriceCents, getVariantIds } from "@/lib/env";
+import { getShirtPriceCents, getVariantIdForSize } from "@/lib/env";
 import { getShippingQuote } from "@/lib/printify";
 import { rateLimit } from "@/lib/rate-limit";
+import { parseDesignText } from "@/lib/design";
 import { normalizeVenmo } from "@/lib/venmo";
 import { quoteRequestSchema } from "@/lib/validators";
 
@@ -24,27 +25,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { venmo, size, address } = parsed.data;
+    const { venmo, designText, size, address } = parsed.data;
     const normalizedVenmo = normalizeVenmo(venmo);
-    const variantIds = getVariantIds();
-    const variantId = variantIds[size];
-
-    if (!variantId) {
-      return NextResponse.json(
-        { error: `No Printify variant configured for size ${size}` },
-        { status: 500 },
-      );
-    }
+    const lines = parseDesignText(designText);
+    const variantId = getVariantIdForSize(size);
 
     const shippingOptions = await getShippingQuote(variantId, address);
     const shirtPriceCents = getShirtPriceCents();
 
     return NextResponse.json({
       venmo: normalizedVenmo,
+      designText: lines.join("\n"),
       size,
       shirtPriceCents,
       shippingOptions,
-      previewUrl: `/api/preview?venmo=${encodeURIComponent(normalizedVenmo)}`,
     });
   } catch (error) {
     console.error("Quote error:", error);

@@ -1,25 +1,71 @@
 import QRCode from "qrcode";
 import sharp from "sharp";
+import { DEFAULT_DESIGN_TEXT } from "./design-defaults";
 import { venmoInitials, venmoUrl } from "./venmo";
 
-const CANVAS_WIDTH = 2400;
-const CANVAS_HEIGHT = 3200;
-const QR_SIZE = 1500;
+export { DEFAULT_DESIGN_TEXT };
 
-export async function generateShirtDesign(venmoUsername: string): Promise<Buffer> {
+const MAX_LINES = 4;
+
+export function escapeXml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+export function parseDesignText(raw: string): string[] {
+  const lines = raw
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .slice(0, MAX_LINES);
+
+  if (lines.length === 0) {
+    return parseDesignText(DEFAULT_DESIGN_TEXT);
+  }
+  return lines;
+}
+
+type RenderOptions = {
+  canvasWidth: number;
+  qrSize: number;
+  fontSize: number;
+  lineHeight: number;
+  gapTextToQr: number;
+};
+
+function layoutForLineCount(lineCount: number, base: RenderOptions): RenderOptions {
+  const scale =
+    lineCount <= 1 ? 1.15 : lineCount === 2 ? 1.08 : lineCount === 4 ? 0.92 : 1;
+  return {
+    ...base,
+    fontSize: Math.round(base.fontSize * scale),
+    lineHeight: Math.round(base.lineHeight * scale),
+  };
+}
+
+async function renderDesign(
+  venmoUsername: string,
+  lines: string[],
+  base: RenderOptions,
+): Promise<Buffer> {
+  const opts = layoutForLineCount(lines.length, base);
   const url = venmoUrl(venmoUsername);
   const initials = venmoInitials(venmoUsername);
 
   const qrRaw = await QRCode.toBuffer(url, {
     errorCorrectionLevel: "H",
     margin: 2,
-    width: QR_SIZE,
+    width: opts.qrSize,
     color: { dark: "#000000", light: "#ffffff" },
   });
 
-  const circleSize = Math.round(QR_SIZE * 0.22);
+  const circleSize = Math.round(opts.qrSize * 0.22);
   const circleSvg = `
-    <svg width="${circleSize}" height="${circleSize}">
+    <svg width="${circleSize}" height="${circleSize}" xmlns="http://www.w3.org/2000/svg">
       <circle cx="${circleSize / 2}" cy="${circleSize / 2}" r="${circleSize / 2}" fill="#ffffff"/>
       <text
         x="50%"
@@ -31,7 +77,7 @@ export async function generateShirtDesign(venmoUsername: string): Promise<Buffer
         font-weight="300"
         fill="#b0b0b0"
         letter-spacing="2"
-      >${initials}</text>
+      >${escapeXml(initials)}</text>
     </svg>
   `;
 
@@ -39,46 +85,75 @@ export async function generateShirtDesign(venmoUsername: string): Promise<Buffer
     .composite([
       {
         input: Buffer.from(circleSvg),
-        top: Math.round((QR_SIZE - circleSize) / 2),
-        left: Math.round((QR_SIZE - circleSize) / 2),
+        top: Math.round((opts.qrSize - circleSize) / 2),
+        left: Math.round((opts.qrSize - circleSize) / 2),
       },
     ])
     .png()
     .toBuffer();
 
-  const textBlockHeight = 700;
+  const textBlockHeight = opts.lineHeight * lines.length + 40;
+  const textLinesSvg = lines
+    .map(
+      (line, i) =>
+        `<text x="50%" y="${opts.lineHeight * (i + 1)}" text-anchor="middle"
+        font-family="Arial, Helvetica, sans-serif" font-size="${opts.fontSize}" font-weight="400" fill="#000000">${escapeXml(line)}</text>`,
+    )
+    .join("\n");
+
   const textSvg = `
-    <svg width="${CANVAS_WIDTH}" height="${textBlockHeight}">
-      <style>
-        .line { font: 400 118px Arial, Helvetica, sans-serif; fill: #000000; }
-      </style>
-      <text x="50%" y="160" text-anchor="middle" class="line">need money</text>
-      <text x="50%" y="310" text-anchor="middle" class="line">for</text>
-      <text x="50%" y="460" text-anchor="middle" class="line">claude code</text>
+    <svg width="${opts.canvasWidth}" height="${textBlockHeight}" xmlns="http://www.w3.org/2000/svg">
+      ${textLinesSvg}
     </svg>
   `;
 
   const textPng = await sharp(Buffer.from(textSvg)).png().toBuffer();
-
-  const qrTop = textBlockHeight + 80;
-  const totalContentHeight = qrTop + QR_SIZE + 80;
+  const canvasHeight = textBlockHeight + opts.gapTextToQr + opts.qrSize + 40;
 
   return sharp({
     create: {
-      width: CANVAS_WIDTH,
-      height: Math.max(CANVAS_HEIGHT, totalContentHeight),
+      width: opts.canvasWidth,
+      height: canvasHeight,
       channels: 4,
       background: { r: 255, g: 255, b: 255, alpha: 0 },
     },
   })
     .composite([
-      { input: textPng, top: 40, left: 0 },
+      { input: textPng, top: 16, left: 0 },
       {
         input: qrWithLogo,
-        top: qrTop,
-        left: Math.round((CANVAS_WIDTH - QR_SIZE) / 2),
+        top: textBlockHeight + opts.gapTextToQr,
+        left: Math.round((opts.canvasWidth - opts.qrSize) / 2),
       },
     ])
     .png()
     .toBuffer();
+}
+
+/** Full-resolution art for Printify */
+export async function generateShirtDesign(
+  venmoUsername: string,
+  lines: string[],
+): Promise<Buffer> {
+  return renderDesign(venmoUsername, lines, {
+    canvasWidth: 2400,
+    qrSize: 1650,
+    fontSize: 200,
+    lineHeight: 230,
+    gapTextToQr: 100,
+  });
+}
+
+/** Display-sized art for website preview (built at target size, not downscaled) */
+export async function generateShirtDesignPreview(
+  venmoUsername: string,
+  lines: string[],
+): Promise<Buffer> {
+  return renderDesign(venmoUsername, lines, {
+    canvasWidth: 480,
+    qrSize: 300,
+    fontSize: 36,
+    lineHeight: 44,
+    gapTextToQr: 24,
+  });
 }

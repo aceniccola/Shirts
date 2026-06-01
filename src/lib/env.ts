@@ -24,11 +24,37 @@ export function getVariantIds(): Record<string, number> {
   if (!raw) {
     throw new Error("Missing PRINTIFY_VARIANT_IDS");
   }
-  const parsed = JSON.parse(raw) as Record<string, number>;
+  let parsed: Record<string, number>;
+  try {
+    parsed = JSON.parse(raw) as Record<string, number>;
+  } catch {
+    throw new Error(
+      "PRINTIFY_VARIANT_IDS must be valid JSON, e.g. {\"S\":12345,\"M\":12346}",
+    );
+  }
   if (!parsed || typeof parsed !== "object") {
     throw new Error("PRINTIFY_VARIANT_IDS must be a JSON object");
   }
+  for (const [size, id] of Object.entries(parsed)) {
+    if (!id || id <= 0) {
+      throw new Error(
+        `PRINTIFY_VARIANT_IDS: size "${size}" has invalid id ${id}. Run npm run printify:discover and paste real variant ids.`,
+      );
+    }
+  }
   return parsed;
+}
+
+export function getVariantIdForSize(size: string): number {
+  const variantIds = getVariantIds();
+  const variantId = variantIds[size];
+  if (!variantId) {
+    const sizes = Object.keys(variantIds).join(", ");
+    throw new Error(
+      `No Printify variant for size "${size}". Configured sizes: ${sizes || "(none)"}`,
+    );
+  }
+  return variantId;
 }
 
 export function getPrintifyConfig() {
