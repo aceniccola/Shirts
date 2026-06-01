@@ -39,28 +39,3 @@ export function renderTextBlockPng(
 
   return Buffer.from(canvas.toBuffer("image/png"));
 }
-
-/** White circle + gray initials for QR center */
-export function renderQrInitialsPng(
-  initials: string,
-  circleSize: number,
-  fontSize: number,
-): Buffer {
-  ensureFontRegistered();
-
-  const canvas = createCanvas(circleSize, circleSize);
-  const ctx = canvas.getContext("2d");
-
-  ctx.beginPath();
-  ctx.arc(circleSize / 2, circleSize / 2, circleSize / 2, 0, Math.PI * 2);
-  ctx.fillStyle = "#ffffff";
-  ctx.fill();
-
-  ctx.font = `${fontSize}px "${CANVAS_FONT_FAMILY}"`;
-  ctx.fillStyle = "#b0b0b0";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(initials, circleSize / 2, circleSize / 2);
-
-  return Buffer.from(canvas.toBuffer("image/png"));
-}

@@ -13,12 +13,3 @@ export function normalizeVenmo(username: string): string {
 export function venmoUrl(username: string): string {
   return `https://venmo.com/${normalizeVenmo(username)}`;
 }
-
-export function venmoInitials(username: string): string {
-  const normalized = normalizeVenmo(username);
-  const letters = normalized.replace(/[^a-z]/g, "");
-  if (letters.length >= 2) {
-    return letters.slice(0, 2).toUpperCase();
-  }
-  return normalized.slice(0, 2).toUpperCase();
-}

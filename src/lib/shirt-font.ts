@@ -17,7 +17,7 @@ export function findFontPath(): string {
 }
 
 /**
- * SVG @font-face embed (fallback / QR initials). Main shirt text uses canvas.
+ * Legacy SVG font embed (unused; shirt text uses canvas).
  */
 export function getSvgFontFace(): string {
   if (cachedFontFace) return cachedFontFace;

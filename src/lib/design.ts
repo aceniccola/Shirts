@@ -1,8 +1,8 @@
 import QRCode from "qrcode";
 import sharp from "sharp";
 import { DEFAULT_DESIGN_TEXT } from "./design-defaults";
-import { renderQrInitialsPng, renderTextBlockPng } from "./render-text";
-import { venmoInitials, venmoUrl } from "./venmo";
+import { renderTextBlockPng } from "./render-text";
+import { venmoUrl } from "./venmo";
 
 export { DEFAULT_DESIGN_TEXT };
 
@@ -23,8 +23,6 @@ const LAYOUT_RATIOS = {
   textTopPad: 16 / PRINT_CANVAS_WIDTH,
   textBlockPad: 40 / PRINT_CANVAS_WIDTH,
   canvasBottomPad: 40 / PRINT_CANVAS_WIDTH,
-  qrLogoCircle: 0.22,
-  qrLogoFontSize: 0.32,
 } as const;
 
 const LINE_COUNT_FONT_SCALE: Record<number, number> = {
@@ -84,32 +82,13 @@ async function renderDesign(
 ): Promise<Buffer> {
   const opts = computeLayout(canvasWidth, lines.length);
   const url = venmoUrl(venmoUsername);
-  const initials = venmoInitials(venmoUsername);
 
-  const qrRaw = await QRCode.toBuffer(url, {
+  const qrPng = await QRCode.toBuffer(url, {
     errorCorrectionLevel: "H",
     margin: 2,
     width: opts.qrSize,
     color: { dark: "#000000", light: "#ffffff" },
   });
-
-  const circleSize = Math.round(opts.qrSize * LAYOUT_RATIOS.qrLogoCircle);
-  const initialsPng = renderQrInitialsPng(
-    initials,
-    circleSize,
-    Math.round(circleSize * LAYOUT_RATIOS.qrLogoFontSize),
-  );
-
-  const qrWithLogo = await sharp(qrRaw)
-    .composite([
-      {
-        input: initialsPng,
-        top: Math.round((opts.qrSize - circleSize) / 2),
-        left: Math.round((opts.qrSize - circleSize) / 2),
-      },
-    ])
-    .png()
-    .toBuffer();
 
   const textBlockHeight = opts.lineHeight * lines.length + opts.textBlockPad;
   const textPng = renderTextBlockPng(
@@ -141,7 +120,7 @@ async function renderDesign(
     .composite([
       { input: textPng, top: opts.textTopPad, left: 0 },
       {
-        input: qrWithLogo,
+        input: qrPng,
         top: qrTop,
         left: qrLeft,
       },
