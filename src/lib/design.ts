@@ -1,7 +1,7 @@
 import QRCode from "qrcode";
 import sharp from "sharp";
 import { DEFAULT_DESIGN_TEXT } from "./design-defaults";
-import { getSvgFontFace, SHIRT_FONT_FAMILY } from "./shirt-font";
+import { renderQrInitialsPng, renderTextBlockPng } from "./render-text";
 import { venmoInitials, venmoUrl } from "./venmo";
 
 export { DEFAULT_DESIGN_TEXT };
@@ -33,15 +33,6 @@ const LINE_COUNT_FONT_SCALE: Record<number, number> = {
   3: 1,
   4: 0.92,
 };
-
-export function escapeXml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
-}
 
 export function parseDesignText(raw: string): string[] {
   const lines = raw
@@ -103,29 +94,16 @@ async function renderDesign(
   });
 
   const circleSize = Math.round(opts.qrSize * LAYOUT_RATIOS.qrLogoCircle);
-  const fontFace = getSvgFontFace();
-  const circleSvg = `
-    <svg width="${circleSize}" height="${circleSize}" xmlns="http://www.w3.org/2000/svg">
-      <defs><style>${fontFace}</style></defs>
-      <circle cx="${circleSize / 2}" cy="${circleSize / 2}" r="${circleSize / 2}" fill="#ffffff"/>
-      <text
-        x="50%"
-        y="54%"
-        text-anchor="middle"
-        dominant-baseline="middle"
-        font-family="${SHIRT_FONT_FAMILY}"
-        font-size="${Math.round(circleSize * LAYOUT_RATIOS.qrLogoFontSize)}"
-        font-weight="400"
-        fill="#b0b0b0"
-        letter-spacing="2"
-      >${escapeXml(initials)}</text>
-    </svg>
-  `;
+  const initialsPng = renderQrInitialsPng(
+    initials,
+    circleSize,
+    Math.round(circleSize * LAYOUT_RATIOS.qrLogoFontSize),
+  );
 
   const qrWithLogo = await sharp(qrRaw)
     .composite([
       {
-        input: Buffer.from(circleSvg),
+        input: initialsPng,
         top: Math.round((opts.qrSize - circleSize) / 2),
         left: Math.round((opts.qrSize - circleSize) / 2),
       },
@@ -134,22 +112,14 @@ async function renderDesign(
     .toBuffer();
 
   const textBlockHeight = opts.lineHeight * lines.length + opts.textBlockPad;
-  const textLinesSvg = lines
-    .map(
-      (line, i) =>
-        `<text x="50%" y="${opts.lineHeight * (i + 1)}" text-anchor="middle"
-        font-family="${SHIRT_FONT_FAMILY}" font-size="${opts.fontSize}" font-weight="400" fill="#000000">${escapeXml(line)}</text>`,
-    )
-    .join("\n");
+  const textPng = renderTextBlockPng(
+    lines,
+    opts.canvasWidth,
+    opts.fontSize,
+    opts.lineHeight,
+    opts.textBlockPad,
+  );
 
-  const textSvg = `
-    <svg width="${opts.canvasWidth}" height="${textBlockHeight}" xmlns="http://www.w3.org/2000/svg">
-      <defs><style>${fontFace}</style></defs>
-      ${textLinesSvg}
-    </svg>
-  `;
-
-  const textPng = await sharp(Buffer.from(textSvg)).png().toBuffer();
   const canvasHeight =
     opts.textTopPad +
     textBlockHeight +
@@ -199,6 +169,7 @@ export async function generateShirtDesignPreview(
   const printArt = await renderDesign(venmoUsername, lines, PRINT_CANVAS_WIDTH);
   return sharp(printArt)
     .resize({ width: PREVIEW_DISPLAY_WIDTH })
+    .flatten({ background: { r: 255, g: 255, b: 255 } })
     .png()
     .toBuffer();
 }

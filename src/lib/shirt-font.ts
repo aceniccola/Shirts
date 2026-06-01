@@ -3,7 +3,7 @@ import { join } from "path";
 
 let cachedFontFace: string | null = null;
 
-function findFontPath(): string {
+export function findFontPath(): string {
   const candidates = [
     join(process.cwd(), "public/fonts/DejaVuSans.ttf"),
     join(process.cwd(), "src/assets/fonts/DejaVuSans.ttf"),
@@ -12,13 +12,12 @@ function findFontPath(): string {
     if (existsSync(path)) return path;
   }
   throw new Error(
-    "DejaVuSans.ttf not found. Run npm install and ensure public/fonts/DejaVuSans.ttf exists.",
+    "DejaVuSans.ttf not found. Ensure public/fonts/DejaVuSans.ttf is deployed.",
   );
 }
 
 /**
- * librsvg (used by sharp for SVG→PNG) has no Arial on Linux/Vercel.
- * Embed DejaVu Sans so text renders instead of tofu boxes.
+ * SVG @font-face embed (fallback / QR initials). Main shirt text uses canvas.
  */
 export function getSvgFontFace(): string {
   if (cachedFontFace) return cachedFontFace;
@@ -37,4 +36,5 @@ export function getSvgFontFace(): string {
   return cachedFontFace;
 }
 
-export const SHIRT_FONT_FAMILY = "ShirtFont, sans-serif";
+export const SHIRT_FONT_FAMILY = "ShirtFont";
+export const CANVAS_FONT_FAMILY = "DejaVu Sans";

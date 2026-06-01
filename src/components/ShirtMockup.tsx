@@ -59,7 +59,7 @@ export function ShirtMockup({ designSrc, loading, error }: ShirtMockupProps) {
 
       {/* Design overlay on chest */}
       <div
-        className="pointer-events-none absolute left-1/2 top-[29%] flex h-[50%] w-[45%] -translate-x-1/2 items-center justify-center"
+        className="pointer-events-none absolute left-1/2 top-[26%] flex h-[52%] w-[48%] -translate-x-1/2 items-start justify-center"
         aria-label="Shirt design preview"
       >
         {loading && (
@@ -77,7 +77,7 @@ export function ShirtMockup({ designSrc, loading, error }: ShirtMockupProps) {
           <img
             src={designSrc}
             alt="Your shirt design"
-            className="max-h-full max-w-full object-contain"
+            className="h-full w-full object-contain object-top"
           />
         )}
         {!loading && !error && !designSrc && (
