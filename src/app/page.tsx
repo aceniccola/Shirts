@@ -10,7 +10,7 @@ export default async function Home({
   let initialBanner: string | null = null;
   if (params.success === "1") {
     initialBanner =
-      "Payment received — a receipt was sent to your email. Your shirt will be sent to Printify once fulfillment completes (usually within a minute).";
+      "Payment received — a receipt was sent to your email. Your shirt request will be sent to Printify once fulfillment completes (usually within a minute). Want another one?";
   } else if (params.canceled === "1") {
     initialBanner = "Checkout canceled. Your cart is still here.";
   }
