@@ -16,6 +16,9 @@ export const metadata: Metadata = {
   title: "Need Money Tee",
   description:
     "Personalized Venmo QR shirt — need money for claude code. Printed on demand.",
+  icons: {
+    icon: [{ url: "/icon.png", type: "image/png", sizes: "512x512" }],
+  },
 };
 
 export default function RootLayout({
